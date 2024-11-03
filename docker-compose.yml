@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    build: .
+    container_name: app
+    environment:
+      - PORT=3000
+      - MONGO_URI=mongodb://root:example@mongo:27017/
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongo
+    command: npx ts-node src/app.ts
+
+volumes:
+  mongo_data:
+
