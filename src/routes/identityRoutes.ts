@@ -1,15 +1,30 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import Identity from '../models/Identity';
-import { validateRut } from '../utils/validateRut'; // Importa la función de validación consolidada
+import { sendToQueue } from '../utils/rabbitmq';
 
 const router = Router();
 
 // Endpoint para registrar identidad
-router.post('/register', async (req: any, res: any) => { // Cambio a `any`
+router.post('/register', async (req: any, res: any) => {
   try {
-    const identity = new Identity(req.body);
+    const { rut, serialNumber, expirationDate } = req.body;
+    
+    if (!rut ) {
+      return res.status(400).json({ error: 'Falta el rut  ' });
+    }
+ 
+    if (!serialNumber) {
+     return res.status(400).json({ error: 'Falta el serial number'});
+    } 
+   
+    if (!expirationDate) {
+     return res.status(400).json({ error: 'Falta el expiration code'});
+    }
+
+    const identity = new Identity({ rut, serialNumber, expirationDate });
     await identity.save();
-    res.status(201).json(identity);
+
+    res.status(201).json({ message: 'Identidad registrada', identity });
   } catch (error) {
     console.error("Error registrando identidad:", error);
     res.status(500).json({ error: 'Error registrando identidad' });
@@ -17,37 +32,19 @@ router.post('/register', async (req: any, res: any) => { // Cambio a `any`
 });
 
 // Endpoint para validar el RUT y la fecha de expiración de la cédula
-router.post('/validate-identity', (req: any, res: any) => { // Cambio a `any`
+router.post('/validate-identity', async (req: any, res: any) => {
   const { rut, expirationDate } = req.body;
 
   if (!rut || !expirationDate) {
     return res.status(400).json({ error: 'RUT y fecha de expiración son requeridos' });
   }
 
-  const validation = validateRut(rut, expirationDate);
+  // Enviar la tarea a RabbitMQ para validación asíncrona
+  const message = { rut, expirationDate };
+  await sendToQueue('identity_validation', message);
 
-  if (!validation.valid) {
-    return res.status(400).json({ error: validation.message });
-  }
-
-  return res.json({ valid: true });
+  return res.status(200).json({ message: 'Validation request sent' });
 });
-
-// Endpoint para verificar identidad
-router.post('/verify', async (req: any, res: any) => { // Cambio a `any`
-  try {
-    const { rut, serialNumber } = req.body;
-    const identity = await Identity.findOne({ rut, serialNumber });
-    if (!identity) {
-      return res.status(404).json({ error: 'Identidad no encontrada' });
-    }
-
-    res.json({ valid: true, identity });
-  } catch (error) {
-    console.error("Error verificando identidad:", error);
-    res.status(500).json({ error: 'Error verificando identidad' });
-  }
-});
-
 
 export default router;
+
